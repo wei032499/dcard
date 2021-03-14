@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css"
+        integrity="sha384-B0vP5xmATw1+K9KRQjQERJvTumQW0nPEzvF6L/Z6nronJ3oUOFUFpCjEUQouq2+l" crossorigin="anonymous">
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-Piv4xVNRyMGpqkS2by6br4gNJ7DXjqk09RmUpJ8jgGtD7zP9yug3goQfGII0yAns"
+        crossorigin="anonymous"></script>
+
+</head>
+
+<body>
+    <div class="container bg-light p-2 mt-3 shadow rounded">
+        <form>
+            <div class="form-group">
+                <label for="emailInput">常用信箱：</label>
+                <input name="email" type="email" class="form-control" id="emailInput">
+            </div>
+            <div class="form-group">
+                <label for="passwordInput">密碼：</label>
+                <input name="password" type="password" class="form-control" id="passwordInput">
+            </div>
+            <div class="d-flex justify-content-center">
+                <button type="reset" class="btn btn-warning mx-1">清除</button>
+                <button type="submit" class="btn btn-primary mx-1">登入</button>
+            </div>
+        </form>
+    </div>
+    <script>
+        $("form").on('submit', function (e) {
+            e.preventDefault();
+            var formDate = {};
+            formDate.email = $("form [name='email']").val();
+            formDate.password = $("form [name='password']").val();
+            $.ajax({
+                type: "POST",
+                url: "./service/sessions",
+                data: JSON.stringify(formDate),
+                dataType: "json",
+                contentType: "application/json"
+            }).done(function () {
+                window.location.assign('./service/api/v2/dcard');
+            }).fail(function (jqXHR, textStatus) {
+                var response = jqXHR.responseJSON;
+
+                if (response.message !== undefined)
+                    alert(response.message);
+                else if (response.error_description !== undefined)
+                    alert(response.error_description);
+                else
+                    alert("Request failed: " + jqXHR.responseText);
+            });
+        })
+    </script>
+</body>
+
+</html>
