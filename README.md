@@ -19,3 +19,6 @@
 #### 資料表索引：
     ALTER TABLE `ratelimit`
       ADD PRIMARY KEY (`ip`);
+
+## Screenshot
+![homepage](https://raw.githubusercontent.com/wei032499/dcard/main/screenshot/homepage.png)

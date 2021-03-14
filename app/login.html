@@ -18,47 +18,90 @@
 </head>
 
 <body>
-    <div class="container bg-light p-2 mt-3 shadow rounded">
-        <form>
-            <div class="form-group">
-                <label for="emailInput">常用信箱：</label>
-                <input name="email" type="email" class="form-control" id="emailInput">
+    <section class="bg-light">
+        <div class="container">
+            <form class="p-2 mt-3 shadow rounded">
+                <div class="form-group">
+                    <label for="emailInput">常用信箱：</label>
+                    <input name="email" type="email" class="form-control" id="emailInput">
+                </div>
+                <div class="form-group">
+                    <label for="passwordInput">密碼：</label>
+                    <input name="password" type="password" class="form-control" id="passwordInput">
+                </div>
+                <div class="d-flex justify-content-center">
+                    <button type="reset" class="btn btn-warning mx-1">清除</button>
+                    <button type="submit" class="btn btn-success mx-1">登入</button>
+                </div>
+            </form>
+            <div id="functions" class="my-2">
+                <button id="me" type="button" class="btn btn-info">Me</button>
+                <button id="dcard" type="button" class="btn btn-primary">Dcard</button>
+                <button id="friends" type="button" class="btn btn-warning">Friends</button>
+                <button id="messages" type="button" class="btn btn-secondary">Messages</button>
+                <button id="logout" type="button" class="btn btn-danger">登出</button>
             </div>
-            <div class="form-group">
-                <label for="passwordInput">密碼：</label>
-                <input name="password" type="password" class="form-control" id="passwordInput">
-            </div>
-            <div class="d-flex justify-content-center">
-                <button type="reset" class="btn btn-warning mx-1">清除</button>
-                <button type="submit" class="btn btn-primary mx-1">登入</button>
-            </div>
-        </form>
-    </div>
+        </div>
+    </section>
     <script>
-        $("form").on('submit', function (e) {
-            e.preventDefault();
-            var formDate = {};
-            formDate.email = $("form [name='email']").val();
-            formDate.password = $("form [name='password']").val();
+        function sendAjax(url, method, formData) {
+            if (formData === undefined)
+                formData = null;
+            else
+                formData = JSON.stringify(formData);
             $.ajax({
-                type: "POST",
-                url: "./service/sessions",
-                data: JSON.stringify(formDate),
+                type: method,
+                url: url,
+                data: formData,
                 dataType: "json",
                 contentType: "application/json"
-            }).done(function () {
-                window.location.assign('./service/api/v2/dcard');
+            }).done(function (result) {
+                if (result === undefined)
+                    alert('success');
+                else if (result.message !== undefined)
+                    alert(result.message);
+                else
+                    alert('success');
             }).fail(function (jqXHR, textStatus) {
                 var response = jqXHR.responseJSON;
 
-                if (response.message !== undefined)
+                if (response === undefined)
+                    alert("Request failed: " + jqXHR.responseText);
+                else if (response.message !== undefined)
                     alert(response.message);
                 else if (response.error_description !== undefined)
                     alert(response.error_description);
                 else
                     alert("Request failed: " + jqXHR.responseText);
             });
+        }
+        $("form").on('submit', function (e) {
+            e.preventDefault();
+            var formData = {};
+            formData.email = $("form [name='email']").val();
+            formData.password = $("form [name='password']").val();
+            sendAjax("./service/sessions", "POST", formData);
         })
+
+        $("#functions button").on('click', function () {
+            switch ($(this).attr('id')) {
+                case 'me':
+                    window.location.assign('./service/api/v2/me');
+                    break;
+                case 'dcard':
+                    window.location.assign('./service/api/v2/dcard');
+                    break;
+                case 'friends':
+                    window.location.assign('./service/api/v2/me/friends');
+                    break;
+                case 'messages':
+                    window.location.assign('./service/api/v2/me/messages');
+                    break;
+                case 'logout':
+                    sendAjax("./service/signout", "GET");
+                    break;
+            }
+        });
     </script>
 </body>
 

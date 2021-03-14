@@ -43,6 +43,14 @@ function sendRes(type, res) {
     res.send(data);
 
 }
+
+function getClientIP(req) {
+    return (req.headers["x-forwarded-for"] || "").split(",").pop().replace(/^.*:/, "") ||
+        req.connection.remoteAddress.replace(/^.*:/, "") ||
+        req.socket.remoteAddress.replace(/^.*:/, "") ||
+        req.connection.socket.remoteAddress.replace(/^.*:/, "");
+}
+
 function setCookie(res, cookies) {
     cookies.forEach(function (cookie) {
         const cookie_s = cookie.split(';');
@@ -59,8 +67,38 @@ function setCookie(res, cookies) {
         if (value !== undefined)
             res.cookie(key, value, options);
     });
-
 }
+
+
+function setCookieByHeaders(res, headers) {
+    if (headers['set-cookie'] !== undefined)
+        setCookie(res, headers['set-cookie']);
+}
+
+
+function getCookieFromArray(array) {
+    let cookies = "";
+    if (typeof array === 'object' && Array.isArray(array)) {
+        array.forEach(function (cookie) {
+            const cookie_s = cookie.split(';');
+            const [key, value] = cookie_s[0].split('=');
+            if (value !== undefined)
+                cookies += key + "=" + value + ";";
+        });
+    }
+    return cookies;
+}
+
+function getCookieFromObj(obj) {
+    let cookies = "";
+    if (typeof obj === 'object') {
+        for (const [key, value] of Object.entries(obj)) {
+            cookies += key + "=" + value + ";";
+        }
+    }
+    return cookies;
+}
+
 function clearAllCookie(res, cookies) {
     cookies.forEach(function (cookie) {
         const cookie_s = cookie.split(';');
@@ -70,38 +108,27 @@ function clearAllCookie(res, cookies) {
     });
 
 }
-function getCookieFromRes(resCookie) {
-    let cookies = "";
-    resCookie.forEach(function (cookie) {
-        cookies += cookie.split(';')[0] + ";";
-    });
-    return cookies;
-}
-function getCookieFromReq(reqCookie) {
-    let cookies = "";
-    if (typeof reqCookie === 'object') {
-        for (const [key, value] of Object.entries(reqCookie)) {
-            cookies += key + "=" + value + ";";
-        }
-    }
-    return cookies;
-}
+
 function httpRequest(url, method, params) {
     const myURL = new URL(url);
     const postData = JSON.stringify(params.content);
+    const headers = { 'content-type': 'application/json' };
+    if (params.cookie !== undefined)
+        headers['Cookie'] = params.cookie;
+    if (params['x-csrf-token'] !== undefined)
+        headers['x-csrf-token'] = params['x-csrf-token'];
+    if (params['x-forwarded-for'] !== undefined) {
+        headers['x-forwarded-for'] = params['x-forwarded-for'];
+        headers['true-client-ip'] = params['x-forwarded-for'];
+        // headers['cf-connecting-ip'] = params['x-forwarded-for'];
+    }
     const options = {
         hostname: myURL.hostname,
         port: 443,
         path: myURL.pathname,
         method: method,
-        headers: {
-            'content-type': 'application/json',
-            'Cookie': params.cookie,
-            'x-csrf-token': 'D62tuUmS-TK9FFxkVnFGp0ySxILQiDtOJ5rk'
-        }
+        headers: headers
     }
-
-    // console.log('header', params.cookie);
 
     return new Promise(function (resolve, reject) {
         callback = function (response) {
@@ -113,8 +140,9 @@ function httpRequest(url, method, params) {
             response.on('end', function () {
                 const result = new Object;
                 result.statusCode = response.statusCode;
-                if (response.headers['set-cookie'] !== undefined)
-                    result.setCookie = response.headers['set-cookie'];
+                result.headers = response.headers;
+                if (params.res !== undefined)
+                    setCookieByHeaders(params.res, result.headers);
                 try {
                     result.data = JSON.parse(data);
                 } catch (e) {
@@ -140,26 +168,16 @@ function httpRequest(url, method, params) {
     });
 }
 exports.login = function (req, res) {
-    const cookies = '__cfduid=d974ea19ee2ed5ca852f5c066a00859e71614956874; _ga_C3J49QFLW7=GS1.1.1614963160.2.1.1614963173.0; _ga=GA1.1.2005185950.1614956876; __auc=9d7dcdb717802ee52fdb5b01c10; dcsrd=eiixKGqZqXAdUILaJ_9iJ78A; dcsrd.sig=N4ygsAld3Z4QI4Ms9pcV0iQNZSk; G_ENABLED_IDPS=google; tabsGroup=v2; __asc=ec92a564178034e33b29ef1a1af; ' + getCookieFromReq(req.cookies);
-    // res.cookie('__cfduid', 'd974ea19ee2ed5ca852f5c066a00859e71614956874', { /*signed: true*/ });
-    // res.cookie('_ga_C3J49QFLW7', 'GS1.1.1614963160.2.1.1614963173.0', { /*signed: true*/ });
-    // res.cookie('_ga', 'GA1.1.2005185950.1614956876', { /*signed: true*/ });
-    // res.cookie('__auc', '9d7dcdb717802ee52fdb5b01c10', { /*signed: true*/ });
-    // res.cookie('dcsrd', 'eiixKGqZqXAdUILaJ_9iJ78A', { /*signed: true*/ });
-    // res.cookie('dcsrd.sig', 'N4ygsAld3Z4QI4Ms9pcV0iQNZSk', { /*signed: true*/ });
-    // res.cookie('G_ENABLED_IDPS', 'google', { /*signed: true*/ });
-    // res.cookie('tabsGroup', 'v2', { /*signed: true*/ });
-    // res.cookie('__asc', 'ec92a564178034e33b29ef1a1af', { /*signed: true*/ });
-    setCookie(res, cookies.split(';'));
+    const clientIP = getClientIP(req);
     const form = {
         'email': req.body.email,
         'password': req.body.password
     };
-
-    httpRequest("https://www.dcard.tw/service/sessions", "POST", { content: form, cookie: cookies })
+    httpRequest("https://www.dcard.tw/service/_ping", "GET", { res: res, 'x-forwarded-for': clientIP, cookie: getCookieFromObj(req.cookies) })
         .then(function (result) {
-            if (result.setCookie !== undefined)
-                setCookie(res, result.setCookie);
+            const cookies = getCookieFromArray(res.getHeaders()['set-cookie']) + getCookieFromObj(req.cookies);
+            return httpRequest("https://www.dcard.tw/service/sessions", "POST", { res: res, 'x-forwarded-for': clientIP, content: form, cookie: cookies, 'x-csrf-token': result.headers['x-csrf-token'] });
+        }).then(function (result) {
             res.status(result.statusCode).send(result.data);
         }).catch((err) => {
             console.log(err);
@@ -168,6 +186,8 @@ exports.login = function (req, res) {
             else
                 res.status(500).send(err);
         });
+
+
 }
 exports.middleware = function (req, res, next) {
     const now = Date.now();
@@ -186,12 +206,7 @@ exports.middleware = function (req, res, next) {
         sendRes(0, res);
     else //進資料庫判斷
     {
-        console.log(req.connection.remoteAddress);
-        const clientIP =
-            (req.headers["x-forwarded-for"] || "").split(",").pop().replace(/^.*:/, "") ||
-            req.connection.remoteAddress.replace(/^.*:/, "") ||
-            req.socket.remoteAddress.replace(/^.*:/, "") ||
-            req.connection.socket.remoteAddress.replace(/^.*:/, "");
+        const clientIP = getClientIP(req);
 
         const database = new Database(conn_config);
         database.query('SELECT * FROM ratelimit WHERE ip = ?', [clientIP])
@@ -259,25 +274,89 @@ exports.middleware = function (req, res, next) {
     }
 };
 exports.logout = function (req, res) {
-    clearAllCookie(res, getCookieFromReq(req.cookies).split(';'));
-    res.status(200).send();
+    // clearAllCookie(res, getCookieFromObj(req.cookies).split(';'));
+    // res.status(200).send();
+    const clientIP = getClientIP(req);
+    httpRequest("https://www.dcard.tw/service/_ping", "GET", { res: res, 'x-forwarded-for': clientIP, cookie: getCookieFromObj(req.cookies) })
+        .then(function (result) {
+            const cookies = getCookieFromArray(res.getHeaders()['set-cookie']) + getCookieFromObj(req.cookies);
+            return httpRequest("https://www.dcard.tw/service/signout", "POST", { res: res, 'x-forwarded-for': clientIP, cookie: cookies, 'x-csrf-token': result.headers['x-csrf-token'] });
+        })
+        .then((result) => {
+            res.status(result.statusCode).send(result.data);
+        }).catch((err) => {
+            console.log(err);
+            if (err.statusCode !== undefined && err.data !== undefined)
+                res.status(err.statusCode).send(err.data);
+            else
+                res.status(500).send(err);
+        });
 }
 
 exports.getDcard = function (req, res) {
-    // console.log('req', req.cookies);
-    httpRequest("https://www.dcard.tw/service/api/v2/dcard", "GET", { cookie: getCookieFromReq(req.cookies) })/*req.signedCookies*/
-        .then((result) => {
-            if (result.setCookie !== undefined)
-                setCookie(res, result.setCookie);
+    const clientIP = getClientIP(req);
+    httpRequest("https://www.dcard.tw/f", "GET", { res: res, 'x-forwarded-for': clientIP, cookie: getCookieFromObj(req.cookies) })
+        .then(function (result) {
+            //     return httpRequest("https://www.dcard.tw/service/_ping", "GET", { res: res, 'x-forwarded-for': clientIP, cookie: getCookieFromArray(res.getHeaders()['set-cookie']) + getCookieFromObj(req.cookies) });
+            // }).then(function (result) {
+            const cookies = getCookieFromArray(res.getHeaders()['set-cookie']) + getCookieFromObj(req.cookies);
+            return httpRequest("https://www.dcard.tw/service/api/v2/dcard", "GET", { res: res, 'x-forwarded-for': clientIP, cookie: cookies, 'x-csrf-token': result.headers['x-csrf-token'] });
+        }).then((result) => {
             res.status(result.statusCode).send(result.data);
-        }).catch(err => {
+            // res.writeHead(result.statusCode, result.headers).end(result.body);
+        }).catch((err) => {
             console.log(err);
-            clearAllCookie(res, getCookieFromReq(req.cookies).split(';'));
-            // res.location('back').sendStatus(500);
             if (err.statusCode !== undefined && err.data !== undefined)
                 res.status(err.statusCode).send(err.data);
             else
                 res.status(500).send(err);
         });
 
+
+}
+
+exports.getMe = function (req, res) {
+    const clientIP = getClientIP(req);
+    httpRequest("https://www.dcard.tw/service/api/v2/me", "GET", { res: res, 'x-forwarded-for': clientIP, cookie: getCookieFromObj(req.cookies) })
+        // .then(function (result) {
+        //     const cookies = getCookieFromArray(res.getHeaders()['set-cookie']) + getCookieFromObj(req.cookies);
+        //     return httpRequest("https://www.dcard.tw/service/signout", "POST", { res: res, 'x-forwarded-for': clientIP, cookie: cookies, 'x-csrf-token': result.headers['x-csrf-token'] });
+        // })
+        .then((result) => {
+            res.status(result.statusCode).send(result.data);
+        }).catch((err) => {
+            console.log(err);
+            if (err.statusCode !== undefined && err.data !== undefined)
+                res.status(err.statusCode).send(err.data);
+            else
+                res.status(500).send(err);
+        });
+}
+
+exports.getFriends = function (req, res) {
+    const clientIP = getClientIP(req);
+    httpRequest("https://www.dcard.tw/service/api/v2/me/friends", "GET", { res: res, 'x-forwarded-for': clientIP, cookie: getCookieFromObj(req.cookies) })
+        .then((result) => {
+            res.status(result.statusCode).send(result.data);
+        }).catch((err) => {
+            console.log(err);
+            if (err.statusCode !== undefined && err.data !== undefined)
+                res.status(err.statusCode).send(err.data);
+            else
+                res.status(500).send(err);
+        });
+}
+
+exports.getMessages = function (req, res) {
+    const clientIP = getClientIP(req);
+    httpRequest("https://www.dcard.tw/service/api/v2/me/messages", "GET", { res: res, 'x-forwarded-for': clientIP, cookie: getCookieFromObj(req.cookies) })
+        .then((result) => {
+            res.status(result.statusCode).send(result.data);
+        }).catch((err) => {
+            console.log(err);
+            if (err.statusCode !== undefined && err.data !== undefined)
+                res.status(err.statusCode).send(err.data);
+            else
+                res.status(500).send(err);
+        });
 }
